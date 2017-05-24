@@ -107,7 +107,7 @@ namespace LibSvm
         return ProbA[0];
       }
 
-      throw new ApplicationException("Model doesn't contain information for SVR probability inference\n");
+      throw new Exception("Model doesn't contain information for SVR probability inference\n");
     }
 
     private double PredictValuesSvrOrOneClass(SvmNode[] x, double[] dec_values)

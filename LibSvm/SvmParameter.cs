@@ -6,7 +6,7 @@ using System.Diagnostics;
 
 namespace LibSvm
 {
-  public class SvmParameter : ICloneable
+  public class SvmParameter
   {
     public SvmType SvmType;
     public KernelType KernelType;
@@ -106,7 +106,7 @@ namespace LibSvm
         {
           int n2 = count[j];
           if (this.Nu*(n1 + n2)/2 > Math.Min(n1, n2))
-            throw new ApplicationException("specified nu is infeasible");
+            throw new Exception("specified nu is infeasible");
         }
       }
     }
@@ -116,44 +116,44 @@ namespace LibSvm
     {
       if (Gamma < 0)
       {
-        throw new ApplicationException("gamma < 0");
+        throw new Exception("gamma < 0");
       }
 
       if (Degree < 0)
       {
-        throw new ApplicationException("degree of polynomial kernel < 0");
+        throw new Exception("degree of polynomial kernel < 0");
       }
 
       // cache_size,eps,C,nu,p,shrinking
 
       if (CacheSize <= 0)
       {
-        throw new ApplicationException("cache_size <= 0");
+        throw new Exception("cache_size <= 0");
       }
 
       if (Eps <= 0)
       {
-        throw new ApplicationException("eps <= 0");
+        throw new Exception("eps <= 0");
       }
 
       if (SvmType.UseCParameter() && C <= 0)
       {
-        throw new ApplicationException("C <= 0");
+        throw new Exception("C <= 0");
       }
 
       if (SvmType.UseNuParameter() && (Nu <= 0 || Nu > 1))
       {
-        throw new ApplicationException("nu <= 0 or nu > 1");
+        throw new Exception("nu <= 0 or nu > 1");
       }
 
       if (SvmType.UsePParameter() && P < 0)
       {
-        throw new ApplicationException("p < 0");
+        throw new Exception("p < 0");
       }
 
       if (Probability && SvmType.IsOneClass())
       {
-        throw new ApplicationException("one-class SVM probability output not supported yet");
+        throw new Exception("one-class SVM probability output not supported yet");
       }
 
       // check whether nu-svc is feasible

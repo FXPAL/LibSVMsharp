@@ -52,7 +52,7 @@ namespace LibSvm
         case KernelType.Precomputed:
           return x[i][(int)(x[j][0].Value)].Value;
         default:
-          throw new ApplicationException("Bad kernel_type");
+          throw new Exception("Bad kernel_type");
       }
     }
 
@@ -156,7 +156,7 @@ namespace LibSvm
         case KernelType.Precomputed:
           return x[(int) (y[0].Value)].Value;
         default:
-          throw new ApplicationException("Bad kernel_type");
+          throw new Exception("Bad kernel_type");
       }
     }
   }

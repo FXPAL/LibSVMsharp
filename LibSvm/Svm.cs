@@ -1,10 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
 using System.Linq;
-using System.Text;
-using LibSvm.JavaPorts;
+using System.Collections;
+using System.Collections.Generic;
 
 namespace LibSvm
 {
@@ -19,7 +16,7 @@ namespace LibSvm
 
     #region private_members
 
-    private static readonly svm_print_interface svm_print_stdout = str => Console.WriteLine(str);
+    private static readonly svm_print_interface svm_print_stdout = str => System.Diagnostics.Debug.WriteLine(str);
 
     private static svm_print_interface svm_print_string = svm_print_stdout;
 
@@ -723,7 +720,7 @@ namespace LibSvm
             if (param.WeightLabel[i] == label[j])
               break;
           if (j == nr_class)
-            Console.Error.WriteLine("WARNING: class label " + param.WeightLabel[i] + " specified in weight is not found\n");
+            System.Diagnostics.Debug.WriteLine("WARNING: class label " + param.WeightLabel[i] + " specified in weight is not found\n");
           else
             weighted_C[j] *= param.Weight[i];
         }
@@ -996,89 +993,9 @@ namespace LibSvm
     static readonly string[] svm_type_table = { "c_svc", "nu_svc", "one_class", "epsilon_svr", "nu_svr", };
     static readonly string[] kernel_type_table = { "linear", "polynomial", "rbf", "sigmoid", "precomputed" };
 
-    public static void SaveModel(String model_file_name, SvmModel model)
+    public static IEnumerable<string> SaveModel(SvmModel model)
     {
-      using (var fp = new StreamWriter(model_file_name, false))
-      {
-        var param = model.Param;
-
-        fp.Write("svm_type " + svm_type_table[(int)param.SvmType] + "\n");
-        fp.Write("kernel_type " + kernel_type_table[(int)param.KernelType] + "\n");
-
-        if (param.KernelType == KernelType.Poly)
-          fp.Write("degree " + param.Degree + "\n");
-
-        if (param.KernelType == KernelType.Poly ||
-            param.KernelType == KernelType.Rbf ||
-            param.KernelType == KernelType.Sigmoid)
-          fp.Write("gamma " + param.Gamma + "\n");
-
-        if (param.KernelType == KernelType.Poly ||
-            param.KernelType == KernelType.Sigmoid)
-          fp.Write("coef0 " + param.Coef0 + "\n");
-
-        int nr_class = model.NrClass;
-        int l = model.TotalSupportVectorsNumber;
-        fp.Write("nr_class " + nr_class + "\n");
-        fp.Write("total_sv " + l + "\n");
-
-        {
-          fp.Write("rho");
-          for (int i = 0; i < nr_class * (nr_class - 1) / 2; i++)
-            fp.Write(" " + model.Rho[i]);
-          fp.Write("\n");
-        }
-
-        if (model.Label != null)
-        {
-          fp.Write("label");
-          for (int i = 0; i < nr_class; i++)
-            fp.Write(" " + model.Label[i]);
-          fp.Write("\n");
-        }
-
-        if (model.ProbA != null) // regression has probA only
-        {
-          fp.Write("probA");
-          for (int i = 0; i < nr_class * (nr_class - 1) / 2; i++)
-            fp.Write(" " + model.ProbA[i]);
-          fp.Write("\n");
-        }
-        if (model.ProbB != null)
-        {
-          fp.Write("probB");
-          for (int i = 0; i < nr_class * (nr_class - 1) / 2; i++)
-            fp.Write(" " + model.ProbB[i]);
-          fp.Write("\n");
-        }
-
-        if (model.SupportVectorsNumbers != null)
-        {
-          fp.Write("nr_sv");
-          for (int i = 0; i < nr_class; i++)
-            fp.Write(" " + model.SupportVectorsNumbers[i]);
-          fp.Write("\n");
-        }
-
-        fp.Write("SV\n");
-        double[][] sv_coef = model.SupportVectorsCoefficients;
-        SvmNode[][] SV = model.SupportVectors;
-
-        for (int i = 0; i < l; i++)
-        {
-          for (int j = 0; j < nr_class - 1; j++)
-            fp.Write(sv_coef[j][i] + " ");
-
-          SvmNode[] p = SV[i];
-          if (param.KernelType == KernelType.Precomputed)
-            fp.Write("0:" + (int)(p[0].Value));
-          else
-            for (int j = 0; j < p.Length; j++)
-              fp.Write(p[j].Index + ":" + p[j].Value + " ");
-          fp.Write("\n");
-        }
-
-      }
+      return new SaveModelEnumerator(model);
     }
 
 
@@ -1092,21 +1009,9 @@ namespace LibSvm
       return int.Parse(s);
     }
 
-    public static SvmModel LoadModel(string modelFileName)
-    {
-      using (var fs = new FileStream(modelFileName, FileMode.Open))
-      {
-        using (var sr = new StreamReader(fs))
-        {
-          return LoadModel(sr);
-        }
-      }
-    }
-
-    public static SvmModel LoadModel(StreamReader fp)
+    public static SvmModel LoadModel(IEnumerable<string> lines)
     {
       // read parameters
-
       var model = new SvmModel();
       var param = new SvmParameter();
       model.Param = param;
@@ -1115,128 +1020,168 @@ namespace LibSvm
       model.ProbB = null;
       model.Label = null;
       model.SupportVectors = null;
-
       var done = false;
-      while (!done)
+      int m = 0;
+      int l = 0;
+      int currentVector = 0;
+      foreach (var cmd in lines)
       {
-        var cmd = fp.ReadLine();
-        var splitted = cmd.Split(new[] {' '}, 2);
-        var prefix = splitted[0];
-        var arg = splitted[1];
-
-        switch (prefix)
+        var splitted = cmd.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+        if (!done)
         {
-          case "svm_type":
-            param.SvmType = (SvmType)Enum.Parse(typeof(SvmType), arg, ignoreCase: true);
-            break;
-
-          case "kernel_type":
-            param.KernelType = (KernelType)Enum.Parse(typeof(KernelType), arg, ignoreCase: true);
-            break;
-
-          case "degree":
-            param.Degree = atoi(arg);
-            break;
-
-          case "gamma":
-            param.Gamma = atof(arg);
-            break;
-
-          case "coef0":
-            param.Coef0 = atof(arg);
-            break;
-
-          case "nr_class":
-            model.NrClass = atoi(arg);
-            break;
-
-          case "total_sv":
-            model.TotalSupportVectorsNumber = atoi(arg);
-            break;
-
-          case "rho":
-            int n = model.NrClass * (model.NrClass - 1) / 2;
-            model.Rho = new double[n];
-            var st = new StringTokenizer(arg);
-            for (int i = 0; i < n; i++)
-              model.Rho[i] = atof(st.NextToken());
-            break;
-
-          case "label":
-            int n2 = model.NrClass;
-            model.Label = new int[n2];
-            var st2 = new StringTokenizer(arg);
-            for (int i = 0; i < n2; i++)
-              model.Label[i] = atoi(st2.NextToken());
-            break;
-
-          case "probA":
-            int n3 = model.NrClass * (model.NrClass - 1) / 2;
-            model.ProbA = new double[n3];
-            var st3 = new StringTokenizer(arg);
-            for (int i = 0; i < n3; i++)
-              model.ProbA[i] = atof(st3.NextToken());
-            break;
-
-          case "probB":
-            int n4 = model.NrClass * (model.NrClass - 1) / 2;
-            model.ProbB = new double[n4];
-            var st4 = new StringTokenizer(arg);
-            for (int i = 0; i < n4; i++)
-              model.ProbB[i] = atof(st4.NextToken());
-            break;
-
-          case "nr_sv":
-            int n5 = model.NrClass;
-            model.SupportVectorsNumbers = new int[n5];
-            var st5 = new StringTokenizer(arg);
-            for (int i = 0; i < n5; i++)
-              model.SupportVectorsNumbers[i] = atoi(st5.NextToken());
-            break;
-
-          case "SV":
-            done = true;
-            break;
-
-          default:
-            Trace.WriteLine("unknown text in model file: [" + cmd + "]");
-            return null;
+          switch (splitted[0])
+          {
+            case "svm_type":
+              param.SvmType = (SvmType)Enum.Parse(typeof(SvmType), splitted[1], ignoreCase: true);
+              break;
+            case "kernel_type":
+              param.KernelType = (KernelType)Enum.Parse(typeof(KernelType), splitted[1], ignoreCase: true);
+              break;
+            case "degree":
+              param.Degree = atoi(splitted[1]);
+              break;
+            case "gamma":
+              param.Gamma = atof(splitted[1]);
+              break;
+            case "coef0":
+              param.Coef0 = atof(splitted[1]);
+              break;
+            case "nr_class":
+              model.NrClass = atoi(splitted[1]);
+              break;
+            case "total_sv":
+              model.TotalSupportVectorsNumber = atoi(splitted[1]);
+              break;
+            case "rho":
+              int n = model.NrClass * (model.NrClass - 1) / 2;
+              model.Rho = new double[n];
+              for (int i = 0; i < n; i++)
+                if (i + 1 < splitted.Length)
+                  model.Rho[i] = atof(splitted[i + 1]);
+              break;
+            case "label":
+              int n2 = model.NrClass;
+              model.Label = new int[n2];
+              for (int i = 0; i < n2; i++)
+                if (i + 1 < splitted.Length)
+                  model.Label[i] = atoi(splitted[i + 1]);
+              break;
+            case "probA":
+              int n3 = model.NrClass * (model.NrClass - 1) / 2;
+              model.ProbA = new double[n3];
+              for (int i = 0; i < n3; i++)
+                if (i + 1 < splitted.Length)
+                  model.ProbA[i] = atof(splitted[i + 1]);
+              break;
+            case "probB":
+              int n4 = model.NrClass * (model.NrClass - 1) / 2;
+              model.ProbB = new double[n4];
+              for (int i = 0; i < n4; i++)
+                if (i + 1 < splitted.Length)
+                  model.ProbB[i] = atof(splitted[i + 1]);
+              break;
+            case "nr_sv":
+              int n5 = model.NrClass;
+              model.SupportVectorsNumbers = new int[n5];
+              for (int i = 0; i < n5; i++)
+                if (i + 1 < splitted.Length)
+                  model.SupportVectorsNumbers[i] = atoi(splitted[i + 1]);
+              break;
+            case "SV":
+              done = true;
+              m = model.NrClass - 1;
+              l = model.TotalSupportVectorsNumber;
+              model.SupportVectorsCoefficients = new double[m][];
+              for (int i = 0; i < m; i++)
+              {
+                model.SupportVectorsCoefficients[i] = new double[l];
+              }
+              model.SupportVectors = new SvmNode[l][];
+              break;
+            default:
+              System.Diagnostics.Debug.WriteLine("unknown text in model file: [" + cmd + "]");
+              return null;
+          }
+        }
+        else if (currentVector < l)
+        {
+          // read sv_coef and SV
+          for (int k = 0; k < m; k++)
+            model.SupportVectorsCoefficients[k][currentVector] = atof(splitted[k]);
+          int n = splitted.Length - m;
+          model.SupportVectors[currentVector] = new SvmNode[n];
+          for (int j = 0; j < n; j++)
+          {
+            var pair = splitted[m + j].Split(new char[]{':'}, 2);
+            model.SupportVectors[currentVector][j] = new SvmNode(atoi(pair[0]), atof(pair[1]));
+          }
+          currentVector++;
         }
       }
-
-      // read sv_coef and SV
-
-      int m = model.NrClass - 1;
-      int l = model.TotalSupportVectorsNumber;
-      model.SupportVectorsCoefficients = new double[m][];
-      for (int i = 0; i < m; i++)
-      {
-        model.SupportVectorsCoefficients[i] = new double[l];
-      }
-      model.SupportVectors = new SvmNode[l][];
-
-      for (int i = 0; i < l; i++)
-      {
-        String line = fp.ReadLine();
-        var st = new StringTokenizer(line, new[] { ' ', '\t', '\n', '\r', '\f', ':' });
-
-        for (int k = 0; k < m; k++)
-          model.SupportVectorsCoefficients[k][i] = atof(st.NextToken());
-        int n = st.CountTokens() / 2;
-        model.SupportVectors[i] = new SvmNode[n];
-        for (int j = 0; j < n; j++)
-        {
-          model.SupportVectors[i][j] = new SvmNode(atoi(st.NextToken()), atof(st.NextToken()));
-        }
-      }
-
-      fp.Close();
       return model;
     }
 
     public static void SetPrintStringFunction(svm_print_interface print_func)
     {
       svm_print_string = print_func ?? svm_print_stdout;
+    }
+  }
+
+  class SaveModelEnumerator : IEnumerable<string>
+  {
+    private SvmModel model;
+
+    internal SaveModelEnumerator(SvmModel model)
+    {
+      this.model = model;
+    }
+
+    public IEnumerator<string> GetEnumerator()
+    {
+      var param = model.Param;
+      yield return "svm_type " + param.SvmType.ToString().ToLower();
+      yield return "kernel_type " + param.KernelType.ToString().ToLower();
+      if (param.KernelType == KernelType.Poly)
+        yield return "degree " + param.Degree;
+      if (param.KernelType == KernelType.Poly ||
+          param.KernelType == KernelType.Rbf ||
+          param.KernelType == KernelType.Sigmoid)
+        yield return "gamma " + param.Gamma;
+      if (param.KernelType == KernelType.Poly ||
+          param.KernelType == KernelType.Sigmoid)
+        yield return "coef0 " + param.Coef0;
+      int nr_class = model.NrClass;
+      int l = model.TotalSupportVectorsNumber;
+      yield return "nr_class " + nr_class;
+      yield return "total_sv " + l;
+      if (model.Rho != null)
+        yield return FormatVector("rho", model.Rho);
+      if (model.Label != null)
+        yield return FormatVector("label", model.Label);
+      if (model.ProbA != null)
+        yield return FormatVector("probA", model.ProbA);
+      if (model.ProbB != null)
+        yield return FormatVector("probB", model.ProbB);
+      if (model.SupportVectorsNumbers != null)
+        yield return FormatVector("nr_sv", model.SupportVectorsNumbers);
+      yield return "SV";
+      double[][] sv_coef = model.SupportVectorsCoefficients;
+      SvmNode[][] SV = model.SupportVectors;
+      for (int i = 0; i < l; i++)
+      {
+        SvmNode[] p = SV[i];
+        yield return string.Join(" ", sv_coef.Select(v => v[i])) + " " + (param.KernelType == KernelType.Precomputed ? "0:" + p[0].Value : string.Join(" ", p.Select(v => v.Index + ":" + v.Value)));
+      }
+    }
+
+    IEnumerator IEnumerable.GetEnumerator()
+    {
+      return GetEnumerator();
+    }
+
+    private static string FormatVector<T>(string prefix, T[] values)
+    {
+      return prefix + " " + string.Join(" ", values);
     }
   }
 }
