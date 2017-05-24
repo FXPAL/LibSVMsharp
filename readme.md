@@ -28,6 +28,8 @@ There is only one big difference, that can affect you. The libsvm implementation
 Contributors
 ------------
 
+LibSvmSharp was created by [Anatoliy Plastinin](https://github.com/antlypls).  This version is based on the [load_model branch](https://github.com/antlypls/LibSvmSharp/tree/load_model) from October 18, 2012.
+
 Kudos goes to:
 
 * [Samuel Jack](https://github.com/samueldjack) &ndash; implemented LoadModel/SaveModel methods.
